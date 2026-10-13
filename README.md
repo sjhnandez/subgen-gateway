@@ -1,5 +1,8 @@
 # subgen-gateway
 
+[![CI](https://github.com/sjhnandez/subgen-gateway/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sjhnandez/subgen-gateway/actions/workflows/ci.yml)
+[![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/sjhnandez/subgen-gateway/badges/coverage.json)](https://github.com/sjhnandez/subgen-gateway/actions/workflows/ci.yml)
+
 Wake-on-demand gateway for a [Subgen](https://github.com/mccloud/subgen) Whisper
 (faster-whisper) subtitle server.
 

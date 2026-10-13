@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Run tests with coverage
+        run: |
+          python -m coverage run -m unittest discover -s tests -v
+          python -m coverage report -m
+          python -m coverage json -o coverage-summary.json
+
+      - name: Upload coverage summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov
+          path: coverage-summary.json
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image (validates the Dockerfile)
+        run: docker build -t subgen-gateway-ci .
+
+  badges:
+    name: badges
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download coverage summary
+        uses: actions/download-artifact@v4
+        with:
+          name: cov
+
+      # Self-contained coverage badge: write shields.io endpoint JSON and push
+      # it alone to the orphan `badges` branch (never on pull requests).
+      - name: Convert coverage to shields.io endpoint JSON
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          summary = json.loads(next(Path('.').rglob('coverage-summary.json')).read_text())
+          pct = round(summary['totals']['percent_covered'])
+          color = 'green' if pct >= 80 else 'yellowgreen' if pct >= 60 else 'yellow' if pct >= 40 else 'red'
+          badge = {'schemaVersion': 1, 'label': 'coverage', 'message': f'{pct}%', 'color': color}
+          Path('coverage.json').write_text(json.dumps(badge) + '\n')
+          PY
+
+      - name: Publish badge to orphan `badges` branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout --orphan badges
+          git rm -rf .
+          git add coverage.json
+          git commit -m 'chore: update coverage badge'
+          git push -f origin badges
+
+  deploy:
+    name: deploy
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency: { group: deploy-subgen-gateway, cancel-in-progress: false }
+    steps:
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
+          curl -fsSL -o "$RUNNER_TEMP/cloudflared" https://github.com/cloudflare/cloudflared/releases/download/2026.10.0/cloudflared-linux-amd64 && chmod +x "$RUNNER_TEMP/cloudflared"
+      - name: Deploy over Cloudflare Tunnel SSH
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes \
+            -o "ProxyCommand=$RUNNER_TEMP/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET" \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -p ${{ vars.DEPLOY_PORT }} ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }} \
+            deploy-subgen-gateway

@@ -30,7 +30,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           python -m coverage run -m unittest discover -s tests -v
-          python -m coverage report -m
+          python -m coverage report -m --fail-under=80
           python -m coverage json -o coverage-summary.json
 
       - name: Upload coverage summary

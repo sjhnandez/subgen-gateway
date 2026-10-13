@@ -134,13 +134,28 @@ On a Docker Compose network no port publish is needed — point Bazarr at
 
 ## Running the tests
 
-The unit tests cover the pure `should_stop` decision function. They stub
-`docker.from_env()` before importing the module, so no Docker daemon or socket is needed:
+The suite is hermetic — stdlib `unittest`/`unittest.mock` only. `docker.from_env()` is
+stubbed before importing `gateway`, and test servers bind to ephemeral `127.0.0.1` ports,
+so no Docker daemon or socket is needed and nothing touches the network or waits on real
+time. It covers:
+
+- the pure `should_stop` decision function;
+- the Docker/wake helpers (`backend_running`, `backend_ready`, `start_backend`,
+  `stop_backend`), the idle monitor loop and the `main()` entry point, with a stubbed
+  Docker client;
+- the HTTP handler end to end: `GET /gateway/status` (state reporting, never wakes the
+  backend), the proxying path against an in-process fake backend (verbatim query strings,
+  multi-chunk request bodies, relayed headers, `HEAD`), `503` when the wake fails and `502`
+  when the backend is unreachable.
+
+Run them with coverage:
 
 ```bash
-docker run --rm -v "$PWD:/app:ro" -w /app -e PYTHONDONTWRITEBYTECODE=1 python:3.12-slim \
-  sh -c 'pip install -q "docker>=7,<8" && python -m unittest discover -s tests -v'
+docker run --rm -v "$PWD:/app:ro" -w /app -e PYTHONDONTWRITEBYTECODE=1 -e COVERAGE_FILE=/tmp/.coverage python:3.12-slim sh -c 'pip install -q -r requirements-dev.txt && python -m coverage run -m unittest discover -s tests -v && python -m coverage report -m'
 ```
+
+(CI runs exactly this command and enforces a minimum coverage of 80% on `gateway.py` via
+`--fail-under=80`; drop the coverage parts for a plain test run.)
 
 ## License
 

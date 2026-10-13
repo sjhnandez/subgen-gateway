@@ -3,11 +3,12 @@
 gateway.py builds its Docker client at import time (`docker.from_env()`), and constructing
 a client pings the Docker daemon for its API version. To keep these tests dependency-free
 (no daemon, no /var/run/docker.sock) we stub `docker.from_env` before importing the module;
-the real `should_stop` implementation is what gets tested. Run them with:
+the real `should_stop` implementation is what gets tested.
 
-    docker run --rm -v "$PWD:/app:ro" -w /app -e PYTHONDONTWRITEBYTECODE=1 \
-      python:3.12-slim \
-      sh -c 'pip install -q "docker>=7,<8" && python -m unittest discover -s tests -v'
+Companion modules cover the rest of gateway.py:
+  * tests/test_gateway_helpers.py -- Docker/wake helpers, idle monitor, main entry point.
+  * tests/test_gateway_http.py -- /gateway/status and the proxying path end to end.
+See the README "Running the tests" section for the coverage command CI uses.
 """
 import unittest
 from unittest import mock

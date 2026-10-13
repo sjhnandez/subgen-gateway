@@ -1,0 +1,26 @@
+# Example Compose file for subgen-gateway.
+#
+# The gateway wakes the backend container (`subgen` by default) when a request arrives and
+# stops it again after it has been idle. It talks to the Docker daemon through the mounted
+# socket; the backend container must already exist (the gateway starts/stops it, it does
+# not create it).
+services:
+  subgen-gateway:
+    build: .
+    container_name: subgen-gateway
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York        # adjust to your timezone
+      - IDLE_STOP_SECONDS=900      # stop the backend after 15 min of idleness
+      - CHECK_INTERVAL_SECONDS=30  # how often the idle monitor runs
+      # Overrides — only needed if the backend container or its address differ from the
+      # defaults (shown here):
+      # - BACKEND_CONTAINER=subgen
+      # - BACKEND_HOST=subgen
+      # - BACKEND_PORT=9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # No published port by default: Bazarr reaches it over the shared Compose network
+    # (http://subgen-gateway:9000). To test from the host, publish the port:
+    # ports:
+    # - "9001:9000"

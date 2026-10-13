@@ -1,0 +1,17 @@
+# Keep the build context minimal: the image only needs the Dockerfile and gateway.py.
+
+# Version control
+.git
+.gitignore
+
+# Docs / dev-only files
+README.md
+LICENSE
+docker-compose.example.yml
+tests/
+
+# Python artifacts / caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
